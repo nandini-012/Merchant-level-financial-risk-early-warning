@@ -493,3 +493,45 @@ Do not train the final model yet.
 Next implementation task:
 construct a reproducible merchant-day feature dataset from fraudTrain.csv
 using only historical information.
+
+
+## Operational Decision — LOOP 006E
+
+Operational alert-capacity assumption:
+
+20 merchant alerts per day.
+
+Rationale:
+The 20-alert/day operating point provides a defensible balance between
+early-warning coverage and analyst alert burden. On the validation period,
+this corresponds to 1,220 alerts over 61 days, with 113 true positives,
+1,107 false positives, 476 false negatives, and 37,303 true negatives.
+
+The resulting validation threshold is:
+
+0.814822766216
+
+The threshold was derived exclusively from the validation period and was
+frozen before final holdout evaluation.
+
+Final holdout performance at this locked threshold:
+
+- Alerts: 912
+- Alerts/day: 20.2667
+- True positives: 79
+- False positives: 833
+- False negatives: 530
+- True negatives: 27,761
+- Precision: 0.086623
+- Recall: 0.129721
+- F1: 0.103879
+- ROC-AUC: 0.820637
+- PR-AUC: 0.071587
+- False-positive rate: 0.029132
+- False alerts/day: 18.5111
+
+The holdout was evaluated only after the threshold was locked and was not
+used for threshold selection.
+
+This is an operational modelling assumption, not a claim about actual
+Razorpay analyst capacity or financial operating costs.
