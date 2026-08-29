@@ -61,7 +61,23 @@ def report_metric(report: str, label: str) -> str:
     return match.group(1).strip()
 
 
-def load_dashboard_data() -> tuple[list[dict[str, object]], int, str]:
+def report_holdout_days(report: str) -> int:
+    """Read the existing holdout duration from the operational report."""
+    match = re.search(r"Holdout period: .+? \((\d+) calendar days\)", report)
+    if not match:
+        raise RuntimeError("Operational report does not contain its holdout duration.")
+    return int(match.group(1))
+
+
+def report_locked_threshold(report: str) -> float:
+    """Read the already locked threshold displayed in the operational report."""
+    match = re.search(r"Locked threshold: `([0-9.]+)`", report)
+    if not match:
+        raise RuntimeError("Operational report does not contain its locked threshold.")
+    return float(match.group(1))
+
+
+def load_dashboard_data() -> tuple[list[dict[str, object]], dict[str, object]]:
     """Join existing alert and explanation outputs for read-only display."""
     input_files = [ALERT_FILE, EXPLANATION_FILE, REPORT_FILE]
     for path in input_files:
@@ -102,6 +118,22 @@ def load_dashboard_data() -> tuple[list[dict[str, object]], int, str]:
                 "prediction_date": row["prediction_date"],
                 "risk_score": float(row["risk_score"]),
                 "alert": int(row["alert"]),
+                "previous_7d_average_transaction_amount": float(
+                    row["previous_7d_average_transaction_amount"]
+                ),
+                "previous_7d_maximum_transaction_amount": float(
+                    row["previous_7d_maximum_transaction_amount"]
+                ),
+                "previous_7d_total_transaction_amount": float(
+                    row["previous_7d_total_transaction_amount"]
+                ),
+                "previous_14d_transaction_count": float(
+                    row["previous_14d_transaction_count"]
+                ),
+                "previous_14d_fraud_rate": float(row["previous_14d_fraud_rate"]),
+                "previous_7d_transaction_count_change": float(
+                    row["previous_7d_transaction_count_change"]
+                ),
                 "explanation": row["explanation"],
             }
         )
@@ -112,21 +144,28 @@ def load_dashboard_data() -> tuple[list[dict[str, object]], int, str]:
 
     total_alerts = int(report_metric(report, "Alert rows").replace(",", ""))
     alerts_per_day = report_metric(report, "Alerts per calendar day")
+    holdout_days = report_holdout_days(report)
+    locked_threshold = report_locked_threshold(report)
     if total_alerts != len(queue):
         raise RuntimeError("Operational report alert count does not match the alert outputs.")
-    if total_alerts != 912 or alerts_per_day != "20.2667":
+    if total_alerts != 912 or alerts_per_day != "20.2667" or holdout_days != 45:
         raise RuntimeError("Existing operational report does not contain the locked dashboard metrics.")
 
     digests_after = {path: file_digest(path) for path in input_files}
     if digests_before != digests_after:
         raise RuntimeError("An existing output changed while the dashboard was loading.")
-    return queue, total_alerts, alerts_per_day
+    return queue, {
+        "total_alerts": total_alerts,
+        "alerts_per_day": alerts_per_day,
+        "maximum_risk_score": max(float(row["risk_score"]) for row in queue),
+        "holdout_days": holdout_days,
+        "locked_threshold": locked_threshold,
+    }
 
 
-def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_day: str) -> str:
+def render_page(queue: list[dict[str, object]], metrics: dict[str, object]) -> str:
     """Render a self-contained browser interface with no write operations."""
     serialized_queue = json.dumps(queue, ensure_ascii=False).replace("</", "<\\/")
-    first_alert = queue[0]
     title = html.escape("Merchant Risk Command Center")
     return f"""<!doctype html>
 <html lang="en">
@@ -140,7 +179,7 @@ def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_da
     main {{ max-width: 1280px; margin: 0 auto; padding: 28px; }}
     h1 {{ margin: 0 0 6px; }}
     .note {{ margin: 0 0 22px; color: #566277; }}
-    .metrics {{ display: grid; grid-template-columns: repeat(2, minmax(180px, 260px)); gap: 16px; margin-bottom: 24px; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }}
     .card, .panel {{ background: white; border: 1px solid #dbe2ee; border-radius: 8px; box-shadow: 0 1px 2px #1720330d; }}
     .card {{ padding: 16px; }} .card span {{ color: #566277; display: block; font-size: .9rem; }} .card strong {{ font-size: 1.7rem; }}
     .layout {{ display: grid; grid-template-columns: minmax(620px, 1.7fr) minmax(290px, .8fr); gap: 18px; align-items: start; }}
@@ -149,8 +188,10 @@ def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_da
     tbody tr {{ cursor: pointer; }} tbody tr:hover, tbody tr.selected {{ background: #eaf2ff; }}
     .score {{ font-variant-numeric: tabular-nums; }} .badge {{ color: #075f38; font-weight: 700; }}
     .detail-label {{ margin: 14px 0 3px; color: #566277; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }}
-    .evidence {{ line-height: 1.55; }}
-    @media (max-width: 900px) {{ .layout {{ grid-template-columns: 1fr; }} .table-wrap {{ max-height: 430px; }} }}
+    .detail-section {{ border-top: 1px solid #e7ecf4; margin-top: 18px; padding-top: 4px; }}
+    .detail-section h3 {{ font-size: .95rem; margin: 12px 0 6px; }} .detail-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 9px 16px; }}
+    .detail-grid div {{ font-size: .88rem; }} .detail-grid span {{ display: block; color: #566277; font-size: .76rem; margin-bottom: 2px; }} .evidence {{ line-height: 1.55; }}
+    @media (max-width: 900px) {{ .metrics {{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }} .layout {{ grid-template-columns: 1fr; }} .table-wrap {{ max-height: 430px; }} }}
   </style>
 </head>
 <body>
@@ -158,8 +199,10 @@ def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_da
     <h1>Merchant Risk Command Center</h1>
     <p class="note">Read-only view of the existing locked merchant-alert outputs. Select an alert row to view its existing evidence text.</p>
     <section class="metrics" aria-label="Alert summary">
-      <div class="card"><span>Total alerts</span><strong>{total_alerts}</strong></div>
-      <div class="card"><span>Alerts/day</span><strong>{html.escape(alerts_per_day)}</strong></div>
+      <div class="card"><span>Total alerts</span><strong>{metrics['total_alerts']}</strong></div>
+      <div class="card"><span>Alerts/day</span><strong>{html.escape(str(metrics['alerts_per_day']))}</strong></div>
+      <div class="card"><span>Maximum risk score</span><strong>{float(metrics['maximum_risk_score']):.12f}</strong></div>
+      <div class="card"><span>Holdout days</span><strong>{metrics['holdout_days']}</strong></div>
     </section>
     <section class="layout">
       <div class="panel">
@@ -174,6 +217,7 @@ def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_da
   </main>
   <script>
     const alerts = {serialized_queue};
+    const lockedThreshold = {float(metrics['locked_threshold']):.12f};
     const queue = document.getElementById('queue');
     const details = document.getElementById('details');
     function show(index) {{
@@ -182,14 +226,28 @@ def render_page(queue: list[dict[str, object]], total_alerts: int, alerts_per_da
       const entries = [
         ['Merchant', item.merchant], ['Prediction date', item.prediction_date],
         ['Risk score', item.risk_score.toFixed(12)], ['Alert', String(item.alert)],
-        ['Explanation / evidence', item.explanation]
+        ['Locked threshold', lockedThreshold.toFixed(12)],
+        ['Risk-score margin above locked threshold', (item.risk_score - lockedThreshold).toFixed(12)]
       ];
       entries.forEach(([label, value]) => {{
         const labelNode = document.createElement('div'); labelNode.className = 'detail-label'; labelNode.textContent = label;
         const valueNode = document.createElement('div'); valueNode.textContent = value;
-        if (label === 'Explanation / evidence') valueNode.className = 'evidence';
         details.append(labelNode, valueNode);
       }});
+      const evidence = document.createElement('section'); evidence.className = 'detail-section';
+      evidence.innerHTML = '<h3>Existing explanation / evidence</h3>';
+      const evidenceText = document.createElement('div'); evidenceText.className = 'evidence'; evidenceText.textContent = item.explanation;
+      evidence.appendChild(evidenceText); details.appendChild(evidence);
+      const amounts = document.createElement('section'); amounts.className = 'detail-section';
+      amounts.innerHTML = '<h3>Historical transaction amounts</h3>';
+      const amountGrid = document.createElement('div'); amountGrid.className = 'detail-grid';
+      [['Prior 7-day average', item.previous_7d_average_transaction_amount.toFixed(2)], ['Prior 7-day maximum', item.previous_7d_maximum_transaction_amount.toFixed(2)], ['Prior 7-day total', item.previous_7d_total_transaction_amount.toFixed(2)]].forEach(([label, value]) => {{ const entry = document.createElement('div'); entry.innerHTML = '<span></span>'; entry.querySelector('span').textContent = label; entry.append(value); amountGrid.appendChild(entry); }});
+      amounts.appendChild(amountGrid); details.appendChild(amounts);
+      const activity = document.createElement('section'); activity.className = 'detail-section';
+      activity.innerHTML = '<h3>Historical activity and fraud-rate values</h3>';
+      const activityGrid = document.createElement('div'); activityGrid.className = 'detail-grid';
+      [['Prior 14-day transaction count', item.previous_14d_transaction_count.toFixed(0)], ['Prior 14-day fraud rate', item.previous_14d_fraud_rate.toFixed(6)], ['Recent 7-day transaction-count change', item.previous_7d_transaction_count_change.toFixed(0)]].forEach(([label, value]) => {{ const entry = document.createElement('div'); entry.innerHTML = '<span></span>'; entry.querySelector('span').textContent = label; entry.append(value); activityGrid.appendChild(entry); }});
+      activity.appendChild(activityGrid); details.appendChild(activity);
       document.querySelectorAll('#queue tr').forEach((row, rowIndex) => row.classList.toggle('selected', rowIndex === index));
     }}
     alerts.forEach((item, index) => {{
@@ -217,15 +275,15 @@ def main() -> None:
     parser.add_argument("--check", action="store_true", help="Validate source outputs without starting a server.")
     args = parser.parse_args()
 
-    queue, total_alerts, alerts_per_day = load_dashboard_data()
+    queue, metrics = load_dashboard_data()
     if args.check:
         print("Merchant Risk Command Center validation: passed")
-        print(f"Total alerts: {total_alerts}")
-        print(f"Alerts/day: {alerts_per_day}")
+        print(f"Total alerts: {metrics['total_alerts']}")
+        print(f"Alerts/day: {metrics['alerts_per_day']}")
         print("Existing output files were read only and were not modified")
         return
 
-    page = render_page(queue, total_alerts, alerts_per_day).encode("utf-8")
+    page = render_page(queue, metrics).encode("utf-8")
 
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - required handler method name
