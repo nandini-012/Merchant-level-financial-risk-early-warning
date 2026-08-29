@@ -8,16 +8,15 @@
 
 **Development Constraint:** Approximately 9 days / 20–30 focused engineering hours
 
-**Current Phase:** Step 1 — Project Definition & Feasibility
+**Current Phase:** Implemented and evaluated temporal-risk prototype
 
-**Status:** Candidate problem defined; technical feasibility not yet validated.
+**Status:** Historical feature pipeline, locked temporal evaluation, generated alert outputs, and a read-only Command Center exist. Latest commit at this documentation update: `5ea7841`.
 
 ---
 
 ## 1. Objective
 
-Build a genuinely working, defensible AI/ML system that addresses one clearly
-defined financial-loss/risk problem relevant to a payment ecosystem.
+Build and evaluate a defensible merchant-level temporal-risk prototype using a fixed historical feature set and chronological evaluation.
 
 The goal is to maximize the probability of producing a shortlist-worthy
 submission rather than maximizing feature count or technical complexity.
@@ -38,125 +37,51 @@ The system must:
 
 ## 2. Candidate Problem
 
-Detect unusual merchant-level behavioural patterns that may indicate an
-emerging fraud/risk episode and provide an explainable early warning.
-
-The system should attempt to identify meaningful changes in merchant behaviour,
-rather than treating every unusual transaction as fraud.
+For a merchant-day prediction point `T`, estimate whether the merchant will have at least two fraudulent transactions during `T+1` through `T+7`, using only historical merchant behaviour before `T`.
 
 ---
 
 ## 3. Conceptual Pipeline
 
-Transactions
-    ↓
-Transaction-level risk signals
-    ↓
-Merchant behavioural baseline
-    ↓
-Temporal behavioural analysis
-    ↓
-Merchant-level risk signal
-    ↓
-Potential transaction-value exposure
-    ↓
-Explainable alert
-    ↓
-Recommended investigation/risk-control action
+`fraudTrain.csv` → merchant-day historical features → eligible merchant-day training dataset with future target → locked HGB model → validation-derived frozen threshold → holdout alerts → evidence-only explanations, operational report, and read-only Command Center.
 
-This architecture is conceptual and NOT YET FROZEN.
+The implemented modelling and output methodology is locked as documented below. It does not prescribe an automatic financial action.
 
 ---
 
 ## 4. Primary User
 
-TBD.
-
-Candidate:
-- Payment-risk analyst / risk operations analyst
-
-Must be validated before finalization.
+The repository provides a read-only review interface for a hypothetical human investigator. It does not establish a real-world user, analyst workflow, or Razorpay operating process.
 
 ---
 
 ## 5. Decision Supported
 
-TBD.
-
-Potential decisions:
-- investigate
-- prioritize investigation
-- review
-- apply an appropriate risk-control process
-
-The system should not automatically perform consequential financial actions
-unless explicitly justified, authorized, and supported by the project scope.
+The output is limited to an alert queue and historical evidence. No intervention, prioritization policy, or consequential financial action is specified.
 
 ---
 
 ## 6. Input Data
 
-TBD.
-
-Required properties will likely include some combination of:
-
-- transaction identifier
-- merchant identifier
-- timestamp
-- transaction amount
-- fraud/risk label or another defensible target
-- relevant transaction attributes
-
-These are requirements to investigate, NOT assumptions that a particular
-dataset contains them.
+The implemented workflow reads `data/raw/fraudTrain.csv` to build processed merchant-day data. `fraudTest.csv` is not used by the locked feature, target, output, explanation, or Command Center workflows.
 
 ---
 
 ## 7. ML Role
 
-ML must have a measurable and necessary role.
-
-The project must not use ML merely because it is an AI/ML project.
-
-The final formulation must establish:
-
-1. what the model predicts
-2. why ML is appropriate
-3. what the target/label represents
-4. how predictions are evaluated
-5. what happens when predictions are wrong
+The locked model is `HistGradientBoostingClassifier(class_weight="balanced", random_state=42, early_stopping=False)`. It produces a positive-class probability used only with the validation-derived locked threshold described in the operational decision.
 
 ---
 
 ## 8. Loss / Exposure
 
-The system may quantify transaction-value exposure associated with a detected
-risk event.
-
-"Exposure" must not automatically be represented as guaranteed or expected
-financial loss.
-
-Any monetary estimate must have an explicit mathematical definition and
-clearly state its assumptions.
+No financial-loss or transaction-value exposure estimate is emitted by the current generated outputs.
 
 ---
 
 ## 9. Evaluation Requirements
 
-Minimum required metrics:
-
-- Precision
-- Recall
-- F1
-- Confusion matrix
-- False-positive cost
-
-Evaluation must use a genuinely held-out test set.
-
-Temporal leakage must be investigated carefully because the problem concerns
-merchant behaviour over time.
-
-Accuracy alone is not sufficient evidence of model quality.
+The locked temporal split is train 2019-01-15–2020-02-28, validation 2020-03-01–2020-04-30, and final holdout 2020-05-01–2020-06-14. The threshold was derived from validation only and frozen before holdout evaluation. Holdout metrics at the locked threshold are ROC-AUC 0.820637, PR-AUC 0.071587, precision 0.086623, recall 0.129721, and F1 0.103879.
 
 ---
 
@@ -204,17 +129,12 @@ architecture must be clearly distinguished.
 
 ## 12. Scope
 
-### MUST HAVE
+### IMPLEMENTED
 
-TBD after data feasibility analysis.
-
-### SHOULD HAVE
-
-TBD.
-
-### COULD HAVE
-
-TBD.
+- 15 historical merchant-day features and a fixed future seven-day target
+- fixed temporal evaluation and locked validation threshold
+- holdout alert CSV, explanation CSV, and operational Markdown report
+- read-only local Merchant Risk Command Center
 
 ### EXPLICITLY OUT OF SCOPE
 
@@ -230,55 +150,37 @@ TBD.
 
 ## 13. Architecture
 
-Status: NOT FROZEN
+Status: locked pipeline for the documented prototype; no project-level redesign is implied.
 
 ---
 
 ## 14. Dataset
 
-Status: NOT SELECTED
+Status: `fraudTrain.csv` is used to construct the processed training data.
 
 ---
 
 ## 15. Model
 
-Status: NOT SELECTED
+Status: locked `HistGradientBoostingClassifier` configuration documented in Section 15 and the operational decision.
 
 ---
 
 ## 16. Backend
 
-Status: NOT STARTED
+Status: no backend service is implemented; the dashboard is a local read-only Python HTTP server.
 
 ---
 
 ## 17. Frontend
 
-Status: NOT STARTED
+Status: `tools/merchant_risk_command_center.py` provides a local read-only interface over existing generated outputs.
 
 ---
 
 ## 18. Experiments
 
-Experiments will use unique IDs:
-
-EXP-001
-EXP-002
-EXP-003
-...
-
-Each experiment should record:
-
-- hypothesis
-- dataset/version
-- features
-- model
-- parameters
-- validation strategy
-- metrics
-- result
-- interpretation
-- decision
+See `docs/EXPERIMENTS.md` for records grounded in the repository scripts, generated outputs, and Git history.
 
 ---
 
@@ -335,19 +237,16 @@ without Command Center approval.
 
 ## 22. Current Risks
 
-1. Merchant-level ground-truth definition is unresolved.
-2. Dataset suitability is unresolved.
-3. Temporal leakage risk is unresolved.
-4. "Anomaly" must not automatically be equated with "fraud".
-5. Monetary exposure must not be presented as guaranteed loss.
-6. Actual Razorpay relevance must be supported without inventing internal details.
+1. A risk score is not proof of fraud, loss, or causality.
+2. The 20-alert/day figure is a project assumption, not actual analyst capacity or cost.
+3. The work does not establish production readiness, calibration, long-term stability, future impact, or persistent merchant identity.
+4. Razorpay relevance must not be inferred from the project name or dataset field names.
 
 ---
 
 ## 23. Current Next Action
 
-Determine whether an available dataset can support a defensible merchant-level
-risk/fraud formulation and held-out evaluation.
+Maintain the locked workflow and use the existing outputs for transparent review; any target, model, feature, split, or threshold change requires project-level approval.
 
 ---
 
@@ -393,7 +292,7 @@ They must never be used as model features.
 
 Each training observation represents a merchant at day T.
 
-The model may use only information available at or before T.
+The model may use only information available strictly before T.
 
 The model predicts whether the merchant will experience at least
 2 fraudulent transactions during the subsequent 7-day period.
@@ -480,19 +379,14 @@ The target may use the future window, but features may not.
 
 ### Test-set policy
 
-fraudTest.csv must remain completely untouched until the final
-chronological evaluation stage.
+`fraudTest.csv` is not used by the documented locked workflow.
 
 No threshold tuning, feature selection, model selection, or hyperparameter
 selection may use the test set.
 
 ### Current decision
 
-Do not train the final model yet.
-
-Next implementation task:
-construct a reproducible merchant-day feature dataset from fraudTrain.csv
-using only historical information.
+The historical feature dataset, training dataset, locked holdout evaluation, alert output, explanation output, operational report, and read-only Command Center have been implemented. The Command Center does not retrain or score data.
 
 
 ## Operational Decision — LOOP 006E
