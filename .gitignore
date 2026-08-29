@@ -1,0 +1,19 @@
+# Raw datasets
+data/raw/
+
+# Generated processed datasets
+data/processed/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+
+# Temporary files
+tmp/

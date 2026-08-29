@@ -353,4 +353,143 @@ risk/fraud formulation and held-out evaluation.
 
 ## 24. Status
 
-🟡 PROJECT DEFINITION IN PROGRESS
+## Target Definition — LOOP 002D
+
+Primary prediction target:
+
+future_7_fraud >= 2
+
+Definition:
+At a merchant-day observation T, the target is 1 when the merchant
+experiences at least 2 fraudulent transactions during the subsequent
+7-day period; otherwise 0.
+
+Prediction horizon:
+7 days.
+
+Rationale:
+- 6,270 positive observations in the training analysis window
+- 1.9148% positive rate
+- Represents repeated future fraud activity rather than a single event
+- Provides substantially more positive examples than >=3 fraud
+- Better aligned with merchant-level early-warning than >=1 fraud
+
+Alternative targets evaluated:
+- future_7_fraud >= 1: 12.9605%
+- future_7_fraud >= 3: 0.2703%
+- future fraud amount thresholds
+- future rate relative to historical baseline
+
+These alternatives remain candidates for sensitivity analysis but are
+not the primary target.
+
+Important:
+Future fraud variables are labels/outcomes only.
+They must never be used as model features.
+
+## LOOP 003 — Feature Specification
+
+### Prediction point
+
+Each training observation represents a merchant at day T.
+
+The model may use only information available at or before T.
+
+The model predicts whether the merchant will experience at least
+2 fraudulent transactions during the subsequent 7-day period.
+
+### Primary target
+
+future_7_fraud >= 2
+
+### Feature design principles
+
+1. Features must be computable using data available at prediction time.
+2. Future observations from T+1 through T+7 must never be used as features.
+3. Future fraud labels must never be used as features.
+4. Features should describe merchant behaviour rather than individual
+   consumer identity.
+5. Features should be explainable to a technical evaluator.
+6. Feature count should remain small enough for the team to understand
+   and defend.
+7. The feature pipeline must be reproducible from the raw training data.
+8. The same feature-generation logic must later be applied to the
+   chronological test period.
+
+### Tier A — Mandatory features
+
+Transaction velocity:
+- transaction count in previous 1 day
+- transaction count in previous 3 days
+- transaction count in previous 7 days
+- transaction count in previous 14 days
+
+Fraud behaviour:
+- fraud count in previous 7 days
+- fraud count in previous 14 days
+- fraud rate in previous 7 days
+- fraud rate in previous 14 days
+
+Behaviour change:
+- recent 7-day transaction count compared with previous 7-day period
+- recent 7-day fraud count compared with previous 7-day period
+
+Transaction amount:
+- total transaction amount in previous 7 days
+- average transaction amount in previous 7 days
+- maximum transaction amount in previous 7 days
+
+### Tier B — Candidate features
+
+- transaction amount standard deviation
+- fraud amount in previous 7 days
+- fraud amount in previous 14 days
+- active days in previous 7/14 days
+- concentration of transactions across active days
+- hour-of-day activity statistics
+
+Tier B features must be evaluated empirically before being retained.
+
+### Tier C — Excluded unless later justified
+
+- customer first/last name
+- credit card number
+- transaction number
+- date of birth
+- gender
+- street address
+- raw ZIP code
+- raw customer identity fields
+
+Reason:
+The project is intended to detect merchant-level behavioural risk.
+These fields add complexity and may shift the system toward customer-level
+classification rather than the intended merchant-level problem.
+
+### Leakage controls
+
+The feature pipeline must guarantee:
+
+feature_time <= prediction_time
+
+and must never access:
+
+prediction_time + 1 day through prediction_time + 7 days.
+
+The target may use the future window, but features may not.
+
+### Test-set policy
+
+fraudTest.csv must remain completely untouched until the final
+chronological evaluation stage.
+
+No threshold tuning, feature selection, model selection, or hyperparameter
+selection may use the test set.
+
+### Current decision
+
+Do not train the final model yet.
+
+Next implementation task:
+construct a reproducible merchant-day feature dataset from fraudTrain.csv
+using only historical information.
